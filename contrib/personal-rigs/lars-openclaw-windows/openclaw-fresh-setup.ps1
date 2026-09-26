@@ -75,7 +75,10 @@ if (-not $SkipModel) {
 
 # --- 2) OpenClaw via offisiell installer ------------------------------------
 Step "2) Installerer/oppdaterer OpenClaw med offisiell installer (inkl. riktig Node)"
-& ([scriptblock]::Create((Invoke-WebRequest -UseBasicParsing https://openclaw.ai/install.ps1).Content)) -NoOnboard
+# PowerShell 7 returns .Content as byte[] for this response; decode it before parsing.
+$installer = (Invoke-WebRequest -UseBasicParsing https://openclaw.ai/install.ps1).Content
+if ($installer -is [byte[]]) { $installer = [Text.Encoding]::UTF8.GetString($installer) }
+& ([scriptblock]::Create($installer.TrimStart([char]0xFEFF))) -NoOnboard
 Update-SessionPath
 if (-not (Get-Command openclaw -ErrorAction SilentlyContinue)) {
     Fail "'openclaw' ble ikke funnet etter installasjon. Aapne en ny PowerShell og kjoer scriptet igjen."

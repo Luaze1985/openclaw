@@ -10,9 +10,10 @@ product source. It only calls OpenClaw's own commands, so `openclaw update`,
 Prerequisite: [Ollama for Windows](https://ollama.com/download) installed.
 
 ```powershell
-# regular PowerShell, not admin
-.\openclaw-fresh-setup.ps1                  # default model: gemma4
-.\openclaw-fresh-setup.ps1 -Model qwen3.5:9b
+# regular PowerShell, not admin. Bypass is needed because Windows 11 blocks
+# local .ps1 files by default (execution policy "Restricted").
+powershell -ExecutionPolicy Bypass -File .\openclaw-fresh-setup.ps1                  # default model: gemma4
+powershell -ExecutionPolicy Bypass -File .\openclaw-fresh-setup.ps1 -Model qwen3.5:9b
 ```
 
 Then send any message to the bot in Telegram and approve it:
