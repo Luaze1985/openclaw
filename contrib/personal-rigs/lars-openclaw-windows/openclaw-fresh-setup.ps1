@@ -35,12 +35,6 @@ function Invoke-Checked {
     if ($LASTEXITCODE -ne 0) { Fail "$What feilet (exit $LASTEXITCODE)" }
 }
 
-function Update-SessionPath {
-    $machine = [Environment]::GetEnvironmentVariable("Path", "Machine")
-    $user    = [Environment]::GetEnvironmentVariable("Path", "User")
-    $env:Path = "$machine;$user"
-}
-
 function Test-Port([int]$Port) {
     try {
         $c = New-Object System.Net.Sockets.TcpClient
@@ -78,8 +72,8 @@ Step "2) Installerer/oppdaterer OpenClaw med offisiell installer (inkl. riktig N
 # PowerShell 7 returns .Content as byte[] for this response; decode it before parsing.
 $installer = (Invoke-WebRequest -UseBasicParsing https://openclaw.ai/install.ps1).Content
 if ($installer -is [byte[]]) { $installer = [Text.Encoding]::UTF8.GetString($installer) }
+# The installer runs in this process and puts its Node/npm directories on $env:Path itself.
 & ([scriptblock]::Create($installer.TrimStart([char]0xFEFF))) -NoOnboard
-Update-SessionPath
 if (-not (Get-Command openclaw -ErrorAction SilentlyContinue)) {
     Fail "'openclaw' ble ikke funnet etter installasjon. Aapne en ny PowerShell og kjoer scriptet igjen."
 }
@@ -115,7 +109,7 @@ if ($TelegramToken) {
 # --- 5) Verifisering ----------------------------------------------------------
 Step "5) Verifiserer"
 openclaw gateway status --json
-openclaw doctor
+if ($NonInteractive) { openclaw doctor --lint } else { openclaw doctor }
 if ($TelegramToken) { openclaw channels status --probe }
 
 if (-not $SkipDashboard) {

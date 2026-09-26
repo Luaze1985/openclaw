@@ -37,9 +37,8 @@ jobs:
 
       - name: Verify config through OpenClaw
         run: |
-          $machine = [Environment]::GetEnvironmentVariable("Path", "Machine")
-          $user    = [Environment]::GetEnvironmentVariable("Path", "User")
-          $env:Path = "$machine;$user"
+          # Keep the step PATH (setup-node's Node 24) first; append the installer's user entries.
+          $env:Path = "$env:Path;" + [Environment]::GetEnvironmentVariable("Path", "User")
           $mode = (openclaw config get gateway.mode) -join ""
           $bind = (openclaw config get gateway.bind) -join ""
           $tg   = (openclaw config get channels.telegram.botToken) -join ""
@@ -50,9 +49,7 @@ jobs:
 
       - name: Verify native service and listener
         run: |
-          $machine = [Environment]::GetEnvironmentVariable("Path", "Machine")
-          $user    = [Environment]::GetEnvironmentVariable("Path", "User")
-          $env:Path = "$machine;$user"
+          $env:Path = "$env:Path;" + [Environment]::GetEnvironmentVariable("Path", "User")
           openclaw gateway status --json
           if ($LASTEXITCODE -ne 0) { throw "gateway status failed" }
           $ok = $false
