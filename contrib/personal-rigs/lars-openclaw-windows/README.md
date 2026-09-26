@@ -47,6 +47,14 @@ Verified against this repo's source and docs:
 | Update/restart fights the gateway | A self-started gateway or custom Scheduled Task is an unverified listener that native restart/update will not kill | Use only `--install-daemon` / `openclaw gateway install`; manage it with `openclaw gateway start/stop/restart` |
 | Agent runs but gives no useful answers | Model lacks tool support or has under 16K context | Pick a tools-capable model, e.g. `gemma4` |
 | Tool calls show up as raw JSON | Ollama `baseUrl` pointed at `/v1` | Use `http://127.0.0.1:11434` without `/v1` (onboarding does this) |
+| `.ps1` refuses to run | Windows 11 execution policy `Restricted` blocks local scripts | Run with `powershell -ExecutionPolicy Bypass -File …` |
+
+Found by the Windows VM CI while building this rig (fixed in the script):
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| Installer step fails with `Unexpected token '32'` | `openclaw.ai/install.ps1` is served as `application/octet-stream`, so PowerShell 7 returns `.Content` as `byte[]` | Decode the bytes to UTF-8 text before `[scriptblock]::Create` |
+| Onboarding refuses with `unsupported Node (22.x)` | Rebuilding `$env:Path` from the registry dropped the supported Node the installer had put on the process PATH | Don't touch PATH; the installer updates the process PATH itself |
 
 ## Troubleshooting commands
 
