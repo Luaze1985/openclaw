@@ -1,0 +1,73 @@
+name: Lars OpenClaw rig test (Windows VM)
+
+on:
+  pull_request:
+    paths:
+      - "contrib/personal-rigs/lars-openclaw-windows/**"
+      - ".github/workflows/lars-openclaw-rig-test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lars-openclaw-rig-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fresh-setup:
+    name: Fresh setup on windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: contrib/personal-rigs/lars-openclaw-windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Run fresh setup (no Ollama, dummy Telegram token)
+        run: |
+          .\openclaw-fresh-setup.ps1 -SkipModel -NonInteractive -SkipDashboard `
+            -TelegramToken "123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+
+      - name: Verify config through OpenClaw
+        run: |
+          $machine = [Environment]::GetEnvironmentVariable("Path", "Machine")
+          $user    = [Environment]::GetEnvironmentVariable("Path", "User")
+          $env:Path = "$machine;$user"
+          $mode = (openclaw config get gateway.mode) -join ""
+          $bind = (openclaw config get gateway.bind) -join ""
+          $tg   = (openclaw config get channels.telegram.botToken) -join ""
+          Write-Host "gateway.mode=$mode gateway.bind=$bind telegram.botToken set=$([bool]$tg)"
+          if ($mode -notmatch "local")    { throw "gateway.mode is not local" }
+          if ($bind -notmatch "loopback") { throw "gateway.bind is not loopback" }
+          if (-not $tg)                   { throw "channels.telegram.botToken missing" }
+
+      - name: Verify native service and listener
+        run: |
+          $machine = [Environment]::GetEnvironmentVariable("Path", "Machine")
+          $user    = [Environment]::GetEnvironmentVariable("Path", "User")
+          $env:Path = "$machine;$user"
+          openclaw gateway status --json
+          if ($LASTEXITCODE -ne 0) { throw "gateway status failed" }
+          $ok = $false
+          for ($i = 0; $i -lt 30; $i++) {
+            try {
+              $c = New-Object System.Net.Sockets.TcpClient
+              $c.Connect("127.0.0.1", 18789)
+              if ($c.Connected) { $ok = $true; $c.Close(); break }
+            } catch {}
+            Start-Sleep -Seconds 2
+          }
+          if (-not $ok) { throw "Gateway did not listen on 18789" }
+
+      - name: Dump gateway logs on failure
+        if: failure()
+        run: |
+          Get-ChildItem "$env:USERPROFILE\.openclaw\logs" -ErrorAction SilentlyContinue |
+            ForEach-Object { Write-Host "--- $($_.Name)"; Get-Content $_.FullName -Tail 200 }
