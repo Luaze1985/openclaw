@@ -1,0 +1,101 @@
+name: Lars OpenClaw rig test (Windows VM)
+
+on:
+  pull_request:
+    paths:
+      - "contrib/personal-rigs/lars-openclaw-windows/**"
+      - ".github/workflows/lars-openclaw-rig-test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lars-openclaw-rig-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fresh-setup:
+    name: Fresh setup on windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: contrib/personal-rigs/lars-openclaw-windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Seed an old hand-made rig to clean up
+        run: |
+          New-Item -ItemType Directory -Force -Path "C:\LocalCRM\AutoStart" | Out-Null
+          Set-Content "C:\LocalCRM\AutoStart\start_services.ps1" "Write-Host legacy"
+          $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-File C:\LocalCRM\AutoStart\start_services.ps1"
+          Register-ScheduledTask -TaskName "OpenClawAutoStart" -Action $action -Trigger (New-ScheduledTaskTrigger -AtLogOn) | Out-Null
+          New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.openclaw" | Out-Null
+          Set-Content "$env:USERPROFILE\.openclaw\openclaw.json" '{ "gateway": { "bind": "127.0.0.1", "port": 18789 }, "channels": { "telegram": { "token": "legacy" } } }'
+
+      # Windows PowerShell 5.1, the same host the README tells the user to run.
+      - name: Run fresh setup (no Ollama, dummy Telegram token)
+        shell: powershell
+        run: |
+          .\openclaw-fresh-setup.ps1 -SkipModel -NonInteractive -SkipDashboard `
+            -TelegramToken "123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+          if ($LASTEXITCODE -ne 0) { throw "setup exited $LASTEXITCODE" }
+
+      - name: Verify old rig was removed and backed up
+        run: |
+          if (Get-ScheduledTask -TaskName "OpenClawAutoStart" -ErrorAction SilentlyContinue) { throw "legacy task still registered" }
+          if (Test-Path "C:\LocalCRM") { throw "C:\LocalCRM was not moved" }
+          if (-not (Get-ChildItem "C:\" -Directory -Filter "LocalCRM.backup-*")) { throw "LocalCRM backup missing" }
+          if (-not (Get-ChildItem $env:USERPROFILE -Directory -Force -Filter ".openclaw.backup-*")) { throw ".openclaw backup missing" }
+          if (-not (Test-Path "$env:LOCALAPPDATA\lars-openclaw-rig\installed.txt")) { throw "rig marker missing" }
+
+      - name: Verify config through OpenClaw
+        run: |
+          # Keep the step PATH (setup-node's Node 24) first; append the installer's user entries.
+          $env:Path = "$env:Path;" + [Environment]::GetEnvironmentVariable("Path", "User")
+          $mode = (openclaw config get gateway.mode) -join ""
+          $bind = (openclaw config get gateway.bind) -join ""
+          $tg   = (openclaw config get channels.telegram.botToken) -join ""
+          $fs   = (openclaw config get tools.fs.workspaceOnly) -join ""
+          $exec = (openclaw config get tools.exec.mode) -join ""
+          # Onboarding stores the workspace on the first agent it creates.
+          $ws   = (openclaw config get agents.entries.main.workspace) -join ""
+          if (-not $ws) { $ws = (openclaw config get agents.defaults.workspace) -join "" }
+          $ws   = $ws.Trim().Trim('"').TrimEnd('\')
+          $expectedWs = "C:\OpenClaw"
+          Write-Host "mode=$mode bind=$bind botToken set=$([bool]$tg) workspaceOnly=$fs exec.mode=$exec workspace=$ws"
+          if ($mode -notmatch "local")    { throw "gateway.mode is not local" }
+          if ($bind -notmatch "loopback") { throw "gateway.bind is not loopback" }
+          if (-not $tg)                   { throw "channels.telegram.botToken missing" }
+          if ($fs -notmatch "true")       { throw "tools.fs.workspaceOnly is not true" }
+          if ($exec -notmatch "ask")      { throw "tools.exec.mode is not ask" }
+          if ($ws -ne $expectedWs)        { throw "workspace is '$ws', expected '$expectedWs'" }
+          if (-not (Test-Path $expectedWs)) { throw "workspace folder missing" }
+
+      - name: Verify native service and listener
+        run: |
+          $env:Path = "$env:Path;" + [Environment]::GetEnvironmentVariable("Path", "User")
+          openclaw gateway status --json
+          if ($LASTEXITCODE -ne 0) { throw "gateway status failed" }
+          $ok = $false
+          for ($i = 0; $i -lt 30; $i++) {
+            try {
+              $c = New-Object System.Net.Sockets.TcpClient
+              $c.Connect("127.0.0.1", 18789)
+              if ($c.Connected) { $ok = $true; $c.Close(); break }
+            } catch {}
+            Start-Sleep -Seconds 2
+          }
+          if (-not $ok) { throw "Gateway did not listen on 18789" }
+
+      - name: Dump gateway logs on failure
+        if: failure()
+        run: |
+          Get-ChildItem "$env:USERPROFILE\.openclaw\logs" -ErrorAction SilentlyContinue |
+            ForEach-Object { Write-Host "--- $($_.Name)"; Get-Content $_.FullName -Tail 200 }
