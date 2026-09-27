@@ -68,7 +68,7 @@ jobs:
           $ws   = (openclaw config get agents.entries.main.workspace) -join ""
           if (-not $ws) { $ws = (openclaw config get agents.defaults.workspace) -join "" }
           $ws   = $ws.Trim().Trim('"').TrimEnd('\')
-          $expectedWs = Join-Path ([Environment]::GetFolderPath("MyDocuments")) "OpenClaw"
+          $expectedWs = if ($env:OneDrive) { Join-Path $env:OneDrive "OpenClaw" } else { Join-Path ([Environment]::GetFolderPath("MyDocuments")) "OpenClaw" }
           Write-Host "mode=$mode bind=$bind botToken set=$([bool]$tg) workspaceOnly=$fs exec.mode=$exec workspace=$ws"
           if ($mode -notmatch "local")    { throw "gateway.mode is not local" }
           if ($bind -notmatch "loopback") { throw "gateway.bind is not loopback" }

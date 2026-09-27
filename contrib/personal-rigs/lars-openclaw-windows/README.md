@@ -30,7 +30,7 @@ updates OpenClaw and leaves the setup it created alone.
 2. Installs or updates OpenClaw with the official `install.ps1 -NoOnboard`,
    which also installs a supported Node (24.16+ or 26.1+).
 3. `openclaw onboard --non-interactive --mode local --auth-choice ollama
-   --workspace Documents\OpenClaw --install-daemon`: writes `gateway.mode=local`,
+   --workspace <agent folder> --install-daemon`: writes `gateway.mode=local`,
    loopback bind, token auth, the Ollama model and the agent workspace, and
    installs the native Scheduled Task (autostart at logon).
 4. Locks the agent to its folder: `tools.fs.workspaceOnly=true` and
@@ -43,7 +43,9 @@ updates OpenClaw and leaves the setup it created alone.
 
 ## Folder access
 
-The agent only sees `Documents\OpenClaw`. Copy in what it should work on.
+The agent only sees its workspace: `OneDrive\OpenClaw`, or `Documents\OpenClaw`
+when OneDrive is not set up. Override with `-Workspace C:\path`. Put the repos
+it should work on inside it (for example `git clone` there).
 
 - OpenClaw can confine file tools to exactly one folder (`tools.fs.workspaceOnly`).
   It has no list of extra allowed folders, and links (junctions/symlinks) that
@@ -51,7 +53,11 @@ The agent only sees `Documents\OpenClaw`. Copy in what it should work on.
   linked in.
 - `workspaceOnly` does not cover shell commands. They run only after you approve
   them (`tools.exec.mode=ask`), in Telegram or the dashboard.
-- If Documents is synced by OneDrive, the workspace syncs too.
+- In OneDrive the script pins the folder ("Always keep on this device"), so files
+  never become cloud-only placeholders that break git and agent reads. OneDrive
+  can still create conflict copies when two machines edit the same repo, and
+  syncing `.git`/`node_modules` is slow. OpenClaw's own state (`~\.openclaw`,
+  SQLite) stays outside OneDrive.
 
 ## Root causes of the earlier friction
 
