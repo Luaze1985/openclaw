@@ -43,21 +43,17 @@ updates OpenClaw and leaves the setup it created alone.
 
 ## Folder access
 
-The agent only sees its workspace: `OneDrive\OpenClaw`, or `Documents\OpenClaw`
-when OneDrive is not set up. Override with `-Workspace C:\path`. Put the repos
-it should work on inside it (for example `git clone` there).
+The agent only sees its workspace, `C:\OpenClaw` (override with `-Workspace C:\path`).
+Put the repos it should work on inside it (for example `git clone` there);
+GitHub is the cloud copy.
 
 - OpenClaw can confine file tools to exactly one folder (`tools.fs.workspaceOnly`).
   It has no list of extra allowed folders, and links (junctions/symlinks) that
-  point outside the workspace are rejected, so other Documents folders cannot be
-  linked in.
+  point outside the workspace are rejected, so other folders cannot be linked in.
 - `workspaceOnly` does not cover shell commands. They run only after you approve
   them (`tools.exec.mode=ask`), in Telegram or the dashboard.
-- In OneDrive the script pins the folder ("Always keep on this device"), so files
-  never become cloud-only placeholders that break git and agent reads. OneDrive
-  can still create conflict copies when two machines edit the same repo, and
-  syncing `.git`/`node_modules` is slow. OpenClaw's own state (`~\.openclaw`,
-  SQLite) stays outside OneDrive.
+- The workspace is deliberately not in OneDrive: sync would fight git and the
+  agent over the same files (locks, conflict copies, cloud-only placeholders).
 
 ## Root causes of the earlier friction
 

@@ -12,7 +12,7 @@
     - finds and removes the old hand-made rig (legacy Scheduled Tasks, C:\LocalCRM,
       old ~\.openclaw); folders are renamed to *.backup-<timestamp>, never deleted
     - installs Ollama with winget when it is missing
-    - gives the agent exactly one folder (OneDrive\OpenClaw, pinned locally) with tools.fs.workspaceOnly
+    - gives the agent exactly one local folder, C:\OpenClaw, with tools.fs.workspaceOnly
     - requires your approval for shell commands (tools.exec.mode=ask)
     - waits for your first Telegram message and approves the pairing itself
 
@@ -30,7 +30,7 @@ param(
     [switch]$SkipModel,
     [switch]$NonInteractive,
     [switch]$SkipDashboard,
-    # Agent folder. Default: OneDrive\OpenClaw, or Documents\OpenClaw without OneDrive.
+    # Agent folder. Default: C:\OpenClaw (local, not synced).
     [string]$Workspace = "",
     # Internal: elevated re-launch that only removes legacy Scheduled Tasks.
     [switch]$CleanupTasksOnly
@@ -43,10 +43,7 @@ $RigStateDir    = Join-Path $env:LOCALAPPDATA "lars-openclaw-rig"
 $RigMarker      = Join-Path $RigStateDir "installed.txt"
 $StateDir       = Join-Path $env:USERPROFILE ".openclaw"
 $LegacyRoot     = "C:\LocalCRM"
-if (-not $Workspace) {
-    $Workspace = if ($env:OneDrive) { Join-Path $env:OneDrive "OpenClaw" }
-                 else { Join-Path ([Environment]::GetFolderPath("MyDocuments")) "OpenClaw" }
-}
+if (-not $Workspace) { $Workspace = "C:\OpenClaw" }
 $Stamp          = Get-Date -Format "yyyyMMdd-HHmmss"
 
 function Step($msg) { Write-Host "`n=== $msg ===" -ForegroundColor Cyan }
@@ -198,12 +195,6 @@ Invoke-Checked "openclaw --version" { openclaw --version }
 # --- 3) Onboarding: config + modell + native autostart ----------------------
 Step "3) Onboarding (gateway.mode=local, loopback, token-auth, native Scheduled Task)"
 New-Item -ItemType Directory -Force -Path $Workspace | Out-Null
-if ($env:OneDrive -and $Workspace.StartsWith($env:OneDrive, [StringComparison]::OrdinalIgnoreCase)) {
-    # Files On-Demand turns idle files into cloud-only placeholders, which breaks git and
-    # agent reads. Pin the folder so OneDrive always keeps a local copy.
-    attrib +P -U "$Workspace" /S /D | Out-Null
-    Write-Host "OneDrive: $Workspace er satt til 'Behold alltid paa denne enheten'"
-}
 $onboardArgs = @(
     "onboard", "--non-interactive", "--accept-risk",
     "--mode", "local",
